@@ -8,3 +8,8 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+
+// Original version of vite and not downgradade
+//     // "vite": "^8.0.0"
+// -  // "@vitejs/plugin-react": "^6.0.0",

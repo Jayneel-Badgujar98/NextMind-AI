@@ -1,9 +1,7 @@
-import React from 'react'
+import ChatContainer from './components/chat/ChatContainer';
 
-const App = () => {
-  return (
-    <div className='text-red-600'>App</div>
-  )
+function App() {
+  return <ChatContainer />;
 }
 
-export default App
+export default App;
