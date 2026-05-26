@@ -12,19 +12,23 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/google": "^3.0.43",
+    "@ai-sdk/google": "^3.0.79",
     "@ai-sdk/openai": "^3.0.41",
     "@google/genai": "^1.46.0",
     "@google/generative-ai": "^0.24.1",
     "@tavily/ai-sdk": "^0.4.1",
-    "ai": "^6.0.116",
+    "ai": "^6.0.190",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.3.1"
+    "mongoose": "^9.3.1",
+    "nodemailer": "^8.0.7",
+    "cloudinary": "^2.5.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

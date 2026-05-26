@@ -1,10 +1,10 @@
 import React from 'react'
 import ChatContainer from '../components/chat/ChatContainer'
 
-const ChatPage = () => {
+const ChatPage = ({ onNavigate }) => {
   return (
     <div>
-      <ChatContainer />
+      <ChatContainer onNavigate={onNavigate} />
     </div>
   )
 }

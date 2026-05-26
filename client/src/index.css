@@ -11,18 +11,31 @@
   --color-nm-dark-surface: #181818;
   --color-nm-dark-hover: #202020;
   
-  --color-nm-light-bg: #F5F5F5;
+  --color-nm-light-bg: #F8FAFC;
   --color-nm-light-sidebar: #FFFFFF;
   --color-nm-light-surface: #FFFFFF;
-  --color-nm-light-hover: #E4E4E7;
+  --color-nm-light-hover: #F1F5F9;
 
   --color-nm-accent: #10A37F;
   --color-nm-accent-hover: #0E8F6E;
+
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-spin-slow: spin 10s linear infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(8px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
 }
 
 @layer base {
   body {
-    @apply font-sans antialiased text-gray-900 bg-[#F5F5F5] dark:text-white dark:bg-[#0D0D0D] transition-colors duration-250 ease-in-out;
+    @apply font-sans antialiased text-slate-800 bg-[#F8FAFC] dark:text-white dark:bg-[#0D0D0D] transition-colors duration-250 ease-in-out;
   }
 }
 

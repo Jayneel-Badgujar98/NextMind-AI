@@ -4,37 +4,38 @@ import Sidebar from './Sidebar';
 import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
+import SettingsModal from './SettingsModal';
 import { APP } from "../../utils/constants";
 
-const ChatContainer = () => {
+const ChatContainer = ({ onNavigate }) => {
+  const [activeModalTab, setActiveModalTab] = useState(null); // 'profile' | 'personalisation' | 'upgrade' | 'settings' | null
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  // Hum array format clean rakh rahe hain: { role: 'user' | 'assistant', content: '...' }
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState(null); // Track the current active chat
+  const [currentChatId, setCurrentChatId] = useState(null); // Track active chat session
   
-  // Stream ko beech mein rokne ke liye
+  // Abort controller for halting stream generation
   const abortControllerRef = useRef(null);
 
   const handleNewChat = () => {
     setMessages([]);
     setCurrentChatId(null);
+    setIsSidebarOpen(false);
   };
 
   const handleChatSelect = async (chatId) => {
+    setIsSidebarOpen(false);
     setIsLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}`);
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}`, {
+        credentials: "include"
+      });
       if (!response.ok) throw new Error("Failed to fetch chat messages");
       
       const data = await response.json();
       if (data.success) {
         setMessages(data.messages);
         setCurrentChatId(chatId);
-        // Automatically close sidebar on mobile after selecting a chat
-        if (window.innerWidth < 768) {
-          setIsSidebarOpen(false);
-        }
       }
     } catch (error) {
       console.error("Error loading chat:", error);
@@ -43,41 +44,51 @@ const ChatContainer = () => {
     }
   };
 
-  const handleSendMessage = async (text) => {
-    if (!text.trim()) return;
+  const handleSendMessage = async (text, attachments = [], customMessages = null, overwriteMessages = false) => {
+    // Prevent sending empty prompts
+    if (!text.trim() && attachments.length === 0 && !customMessages) return;
 
     const now = new Date().toISOString();
+    let targetMessages;
 
-    // 1. User ka message UI mein add karo
-    const newUserMsg = { role: "user", content: text, timestamp: now };
-    const updatedMessages = [...messages, newUserMsg];
-    setMessages(updatedMessages);
+    if (customMessages) {
+      targetMessages = customMessages;
+    } else {
+      const newUserMsg = { role: "user", content: text, attachments, timestamp: now };
+      targetMessages = [...messages, newUserMsg];
+    }
+
+    setMessages(targetMessages);
     setIsLoading(true);
 
-    // 2. AI ke answer ke liye ek khali (empty) placeholder add karo
+    // 2. Add assistant response placeholder
     setMessages((prev) => [...prev, { role: "assistant", content: "", timestamp: now }]);
 
-    // 3. AbortController setup karo (Stop button ke liye)
+    // 3. Setup AbortController for stop generation triggers
     abortControllerRef.current = new AbortController();
 
     try {
-      // Axios ki jagah native Fetch use kiya kyunki ye Streams ke liye best hai
       const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages, chatId: currentChatId }), // Send chatId to backend
-        signal: abortControllerRef.current.signal, // Stop function connect kiya
+        credentials: "include", // Sync cookie sessions automatically
+        body: JSON.stringify({ 
+          messages: targetMessages, 
+          chatId: currentChatId,
+          overwriteMessages: overwriteMessages 
+        }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) throw new Error("Network response was not ok");
 
-      // Extract new chatId if backend created one (for first message)
+      // Extract new chatId if server created one (for first message)
       const returnedChatId = response.headers.get("x-chat-id");
       if (returnedChatId && !currentChatId) {
         setCurrentChatId(returnedChatId);
       }
 
-      // 4. Stream padhne ka setup
+      // 4. Stream reader pipeline
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let aiFullResponse = "";
@@ -85,16 +96,14 @@ const ChatContainer = () => {
       while (true) {
         const { done, value } = await reader.read();
         
-        if (done) break; // Stream khatam
+        if (done) break;
 
-        // Raw bytes ko text mein decode karo
         const chunkText = decoder.decode(value, { stream: true });
         aiFullResponse += chunkText;
 
-        // 5. State update karo taaki typing effect aaye
+        // Update last message in array (the assistant placeholder)
         setMessages((prev) => {
           const newMessages = [...prev];
-          // Sabse aakhiri message (AI placeholder) ko update karo
           newMessages[newMessages.length - 1].content = aiFullResponse;
           return newMessages;
         });
@@ -117,7 +126,31 @@ const ChatContainer = () => {
     }
   };
 
-  // User jab "Stop" dabaye
+  const handleEditMessage = async (index, newText) => {
+    const now = new Date().toISOString();
+    
+    // Update content of edited message
+    const editedMsg = { 
+      ...messages[index], 
+      content: newText, 
+      timestamp: now 
+    };
+    
+    // Truncate everything after the edited message
+    const customMessages = [...messages.slice(0, index), editedMsg];
+    
+    // Resubmit using the overwriteMessages driver
+    await handleSendMessage("", [], customMessages, true);
+  };
+
+  const handleRegenerateResponse = async (index) => {
+    // Truncate the assistant message at target index and everything after it
+    const customMessages = messages.slice(0, index);
+    
+    // Resubmit preceding user query using the overwriteMessages driver
+    await handleSendMessage("", [], customMessages, true);
+  };
+
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -126,31 +159,46 @@ const ChatContainer = () => {
   };
 
   return (
-    <div className="flex h-screen bg-[#F5F5F5] dark:bg-[#0D0D0D] text-[#18181B] dark:text-white overflow-hidden transition-all-ease">
+    <div className="flex h-screen bg-[#F8FAFC] dark:bg-[#0D0D0D] text-slate-800 dark:text-white overflow-hidden transition-all-ease">
       <Sidebar 
         isOpen={isSidebarOpen} 
         onNewChat={handleNewChat} 
         onChatSelect={handleChatSelect}
         currentChatId={currentChatId}
+        onNavigate={onNavigate}
+        onOpenSettingsTab={(tab) => setActiveModalTab(tab)}
       />
 
       <div className="flex-1 flex flex-col relative">
-        <ChatHeader toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+        <ChatHeader toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} onNavigate={onNavigate} />
 
-        {/* Hum prop bhej rahe hain taaki MessageList inko samajh sake */}
-        <MessageList messages={messages} isLoading={isLoading} />
+        <MessageList 
+          messages={messages} 
+          isLoading={isLoading} 
+          onSendMessage={handleSendMessage} 
+          onEditMessage={handleEditMessage}
+          onRegenerateResponse={handleRegenerateResponse}
+        />
 
         <ChatInput 
           onSendMessage={handleSendMessage} 
           isLoading={isLoading} 
-          onStop={handleStop} // Stop handle pass kiya
+          onStop={handleStop}
         />
       </div>
 
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-10 md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-10 md:hidden animate-fade-in"
           onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {activeModalTab && (
+        <SettingsModal 
+          activeTab={activeModalTab} 
+          onClose={() => setActiveModalTab(null)} 
+          onNavigate={onNavigate}
         />
       )}
     </div>

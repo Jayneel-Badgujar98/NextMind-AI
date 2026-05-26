@@ -1,15 +1,10 @@
 import Chat from "../models/chatModel.js";
 import User from "../models/userModel.js";
 
-// Fetch all chats for the dummy user (only titles and IDs)
+// Fetch all chats for the logged-in user (only titles and IDs)
 export const getUserChats = async (req, res) => {
   try {
-    const dummyUser = await User.findOne({ email: "test@example.com" });
-    if (!dummyUser) {
-      return res.status(404).json({ success: false, message: "Dummy user not found" });
-    }
-
-    const chats = await Chat.find({ userId: dummyUser._id })
+    const chats = await Chat.find({ userId: req.user._id })
       .select("_id title updatedAt")
       .sort({ updatedAt: -1 }); // Latest chats first
 
@@ -24,13 +19,8 @@ export const getUserChats = async (req, res) => {
 export const getChatMessages = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    const dummyUser = await User.findOne({ email: "test@example.com" });
-    if (!dummyUser) {
-      return res.status(404).json({ success: false, message: "Dummy user not found" });
-    }
 
-    const chat = await Chat.findOne({ _id: id, userId: dummyUser._id });
+    const chat = await Chat.findOne({ _id: id, userId: req.user._id });
     
     if (!chat) {
       return res.status(404).json({ success: false, message: "Chat not found" });

@@ -7,15 +7,15 @@ const connectDB = async () => {
     console.log("MongoDB connected")
 
     // Create a dummy user if none exists for testing purposes
-    const existingUser = await User.findOne({ email: "test@example.com" })
-    if (!existingUser) {
-      await User.create({
-        name: "Test User",
-        email: "test@example.com",
-        password: "123456" // In a real app, this should be hashed
-      })
-      console.log("Dummy user created")
-    }
+    // const existingUser = await User.findOne({ email: "test@example.com" })
+    // if (!existingUser) {
+    //   await User.create({
+    //     name: "Test User",
+    //     email: "test@example.com",
+    //     password: "123456" // In a real app, this should be hashed
+    //   })
+    //   console.log("Dummy user created")
+    // }
 
   } catch (error) {
     console.error("MongoDB connection failed", error)
