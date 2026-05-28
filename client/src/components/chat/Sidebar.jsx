@@ -26,7 +26,7 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
     
     setIsLoadingHistory(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT_HISTORY}`, {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT_HISTORY}`, {
         credentials: "include" // Crucial to send credentials cookie with fetch
       });
       if (response.ok) {

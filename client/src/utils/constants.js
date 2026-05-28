@@ -10,6 +10,7 @@ export const APP = {
     AI_AVATAR: "https://api.dicebear.com/7.x/bottts/svg?seed=NexMind", // Dynamic AI Avatar
     USER_PLACEHOLDER: "https://api.dicebear.com/7.x/avataaars/svg?seed=User",
     BASE_URL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
+    BACKEND_URL: (import.meta.env.VITE_BACKEND_URL || "http://localhost:3000").replace(/\/$/, ""),
     CHAT: "/api/ai/chat",
     CHAT_HISTORY: "/api/chats",
     LOGIN: "/auth/login",

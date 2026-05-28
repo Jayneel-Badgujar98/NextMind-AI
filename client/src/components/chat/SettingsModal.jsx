@@ -3,6 +3,8 @@ import { X, User, Sliders, Sparkles, Settings, Globe, Trash2, Key, Download, Che
 import { useAuth } from '../../context/authContext';
 import { useTheme } from '../../context/ThemeContext';
 
+const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const SettingsModal = ({ activeTab, onClose, onNavigate }) => {
   const { user, updateUserPreferences, deleteUserAccount } = useAuth();
   const { themeMode, selectTheme } = useTheme();
@@ -41,7 +43,7 @@ const SettingsModal = ({ activeTab, onClose, onNavigate }) => {
     if (!user) return;
     setIsLoadingAnalytics(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/chat/analytics/logs`, {
+      const response = await fetch(`${backendUrl}/api/chat/analytics/logs`, {
         credentials: "include"
       });
       if (response.ok) {
@@ -122,7 +124,7 @@ const SettingsModal = ({ activeTab, onClose, onNavigate }) => {
     if (!confirmation) return;
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/chat/clear`, {
+      const response = await fetch(`${backendUrl}/api/chat/clear`, {
         method: "DELETE",
         credentials: "include"
       });

@@ -9,8 +9,29 @@ import path from "path";
 
 const app = express() ;
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173"
+];
+
+if (process.env.CLIENT_URL) {
+  // Normalize the client URL by removing any trailing slash
+  const normalizedClientUrl = process.env.CLIENT_URL.replace(/\/$/, "");
+  allowedOrigins.push(normalizedClientUrl);
+}
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.error(`Blocked by CORS: Origin ${origin} not in allowed list:`, allowedOrigins);
+      return callback(new Error('Not allowed by CORS'), false);
+    }
+  },
   credentials: true
 })) ;
 app.use(cookieParser());

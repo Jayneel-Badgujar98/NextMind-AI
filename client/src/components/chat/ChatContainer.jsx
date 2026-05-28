@@ -29,7 +29,7 @@ const ChatContainer = ({ onNavigate }) => {
     setIsSidebarOpen(false);
     setIsLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}`, {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}`, {
         credentials: "include"
       });
       if (!response.ok) throw new Error("Failed to fetch chat messages");
@@ -70,7 +70,7 @@ const ChatContainer = ({ onNavigate }) => {
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${APP.CHAT}`, {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Sync cookie sessions automatically

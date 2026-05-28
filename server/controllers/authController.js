@@ -13,10 +13,11 @@ const generateToken = (userId) => {
 
 // Helper to set Cookie
 const setAuthCookie = (res, token) => {
+  const isProd = process.env.NODE_ENV === "production";
   res.cookie("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Secure only in production (HTTPS)
-    sameSite: "lax", // Prevent CSRF but allow normal links
+    secure: isProd, // Secure only in production (HTTPS)
+    sameSite: isProd ? "none" : "lax", // "none" required for cross-site cookies in prod
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
   });
 };
@@ -162,10 +163,11 @@ export const login = async (req, res) => {
 // @route   POST /api/auth/logout
 export const logout = async (req, res) => {
   try {
+    const isProd = process.env.NODE_ENV === "production";
     res.cookie("token", "", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       expires: new Date(0), // Instantly expires cookie
     });
 
@@ -633,11 +635,12 @@ export const deleteAccount = async (req, res) => {
     await User.findByIdAndDelete(req.user._id);
 
     // Clear JWT cookie
+    const isProd = process.env.NODE_ENV === "production";
     res.cookie("token", "", {
       httpOnly: true,
       expires: new Date(0),
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
     });
 
     res.status(200).json({
