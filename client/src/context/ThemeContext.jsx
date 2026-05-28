@@ -3,40 +3,65 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
-  // Set default theme to 'dark'
-  const [theme, setTheme] = useState('dark');
+  const [themeMode, setThemeMode] = useState('system'); // 'light' | 'dark' | 'system'
 
   useEffect(() => {
-    // Read from localStorage on mount, fallback to default (dark)
-    const storedTheme = localStorage.getItem('theme');
+    // Read from localStorage on mount, fallback to system
+    const storedTheme = localStorage.getItem('themePreference');
     if (storedTheme) {
-      setTheme(storedTheme);
+      setThemeMode(storedTheme);
     } else {
-      // Default is dark as requested
-      setTheme('dark');
-      localStorage.setItem('theme', 'dark');
+      setThemeMode('system');
+      localStorage.setItem('themePreference', 'system');
     }
   }, []);
 
   useEffect(() => {
-    // Apply the theme to the <html> element for Tailwind's dark: modifier
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const applyTheme = () => {
+      if (themeMode === 'system') {
+        const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (isSystemDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } else if (themeMode === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme();
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
     }
-  }, [theme]);
+  }, [themeMode]);
+
+  const selectTheme = (mode) => {
+    setThemeMode(mode);
+    localStorage.setItem('themePreference', mode);
+  };
 
   const toggleTheme = () => {
-    setTheme((prevTheme) => {
-      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
-      localStorage.setItem('theme', newTheme);
-      return newTheme;
+    setThemeMode((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      localStorage.setItem('themePreference', next);
+      return next;
     });
   };
 
+  // Expose active theme ('light' | 'dark') for normal image assets or logo logic
+  const activeTheme = themeMode === 'system' 
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : themeMode;
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: activeTheme, themeMode, selectTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

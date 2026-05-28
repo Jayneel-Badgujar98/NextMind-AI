@@ -12,6 +12,10 @@ const chatSchema = new mongoose.Schema(
       type: String,
       default: "New Chat" // Jab chat shuru hogi, title yehi rahega
     },
+    categoryTag: {
+      type: String,
+      default: "#General"
+    },
     messages: [
       {
         role: {

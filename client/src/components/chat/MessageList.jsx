@@ -3,9 +3,11 @@ import React, { useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { Compass, Sparkles, Code, MessageSquare, Terminal } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 const MessageList = ({ messages, isLoading, onSendMessage, onEditMessage, onRegenerateResponse }) => {
   const endOfMessagesRef = useRef(null);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,11 +45,32 @@ const MessageList = ({ messages, isLoading, onSendMessage, onEditMessage, onRege
       <div className="max-w-4xl mx-auto space-y-6">
         {messages.length === 0 ? (
           <div className="min-h-[50vh] sm:min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-4 sm:py-8">
-            
+
             {/* Animated Brand Emblem */}
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center mb-4 sm:mb-6 shadow-md hover:scale-105 transition-transform duration-300 border border-slate-800 dark:border-white">
-              <Compass size={28} className="sm:size-[32px] animate-spin-slow" />
-            </div>
+            {/* Avatar (Only for AI) */}
+
+
+            <img
+              src={theme === "dark" ? "/LOGO_DARK.png" : "/LOGO_LIGHT.png"}
+              alt="NextMind Logo"
+              className="
+    h-12 w-12
+    sm:h-14 sm:w-14
+    md:h-20 md:w-20
+
+    object-contain
+    rounded-full
+    p-1.5
+
+    transition-all duration-300
+  "
+              onError={(e) => {
+                e.target.style.display = "none";
+                e.target.nextSibling.style.display = "flex";
+              }}
+            />
+
+
 
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-2 sm:mb-3 font-sans">
               Welcome to NextMind
@@ -59,7 +82,7 @@ const MessageList = ({ messages, isLoading, onSendMessage, onEditMessage, onRege
             {/* Suggestions Grid: Hidden on mobile/smaller devices, visible on laptops/desktops */}
             <div className="w-full hidden md:grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-3xl">
               {suggestions.map((item, idx) => (
-                <button 
+                <button
                   key={idx}
                   onClick={() => onSendMessage && onSendMessage(item.prompt)}
                   className="p-4 text-left bg-white dark:bg-white/[0.02] hover:bg-slate-50 dark:hover:bg-white/[0.04] border border-slate-200/80 dark:border-white/[0.08] hover:border-slate-350 dark:hover:border-white/20 rounded-2xl cursor-pointer shadow-sm hover:shadow-md transition-all duration-200 group flex flex-col justify-between min-h-[110px] active:scale-[0.98] outline-none"

@@ -572,3 +572,80 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error." });
   }
 };
+
+// @desc    Update user preferences and personalization settings
+// @route   PUT /api/auth/preferences
+export const updatePreferences = async (req, res) => {
+  try {
+    const { 
+      name, 
+      avatar,
+      language, 
+      themePreference, 
+      enterSends, 
+      temperature, 
+      instructionsWho, 
+      instructionsHow 
+    } = req.body;
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (name) user.name = name;
+    if (avatar !== undefined) user.avatar = avatar;
+    if (language) user.language = language;
+    if (themePreference) user.themePreference = themePreference;
+    if (enterSends !== undefined) user.enterSends = enterSends;
+    if (temperature !== undefined) user.temperature = temperature;
+    if (instructionsWho !== undefined) user.instructionsWho = instructionsWho;
+    if (instructionsHow !== undefined) user.instructionsHow = instructionsHow;
+
+    await user.save();
+
+    // Exclude password
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+
+    res.status(200).json({
+      success: true,
+      message: "Preferences updated successfully",
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error("UpdatePreferences Controller Error:", error);
+    res.status(500).json({ success: false, message: "Failed to update preferences." });
+  }
+};
+
+// @desc    Delete user account and all their chats
+// @route   DELETE /api/auth/delete-account
+export const deleteAccount = async (req, res) => {
+  try {
+    // Dynamic import to avoid circular dependencies
+    const Chat = (await import("../models/chatModel.js")).default;
+    
+    // Delete all chats for the user
+    await Chat.deleteMany({ userId: req.user._id });
+    
+    // Delete the user
+    await User.findByIdAndDelete(req.user._id);
+
+    // Clear JWT cookie
+    res.cookie("token", "", {
+      httpOnly: true,
+      expires: new Date(0),
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Account and all associated chats deleted successfully."
+    });
+  } catch (error) {
+    console.error("DeleteAccount Controller Error:", error);
+    res.status(500).json({ success: false, message: "Failed to delete account." });
+  }
+};

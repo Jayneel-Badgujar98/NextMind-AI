@@ -53,9 +53,10 @@ async function resolveAttachmentToBase64(att) {
  * blocks search grounding requests with a 429 quota exhaustion error.
  * 
  * @param {Array} messagesArray - Array of UI messages { role, content }
+ * @param {Object} [userObj=null] - The user settings profile from MongoDB
  * @returns {Promise<AsyncGenerator>} - Async stream generator
  */
-export async function getAIResponseStream(messagesArray) {
+export async function getAIResponseStream(messagesArray, userObj = null) {
     try {
         // Map messages to Google GenAI format asynchronously to resolve file bytes
         const formattedContents = await Promise.all(messagesArray.map(async (msg) => {
@@ -91,17 +92,33 @@ export async function getAIResponseStream(messagesArray) {
             };
         }));
 
+        let systemInstruction = `You are NextMind AI, a highly intelligent, next-generation premium AI assistant developed by Jayneel Badgujar and Trained by Google . 
+             
+           `;
+
+        // Inject Custom Language Preference
+        if (userObj && userObj.language) {
+            systemInstruction += `\n\nDefault Responding Language: The user prefers responses in ${userObj.language}. Adopt ${userObj.language} for your explanations and instructions unless specifically requested otherwise in the prompt.`;
+        }
+
+        // Inject ChatGPT-style Custom Instructions
+        if (userObj) {
+            if (userObj.instructionsWho) {
+                systemInstruction += `\n\nWhat NextMind should know about the user to provide better responses:\n"${userObj.instructionsWho}"`;
+            }
+            if (userObj.instructionsHow) {
+                systemInstruction += `\n\nHow the user wants NextMind to respond:\n"${userObj.instructionsHow}"`;
+            }
+        }
+
+        const targetTemp = userObj && userObj.temperature !== undefined ? userObj.temperature : 0.7;
+
         const responseStream = await ai.models.generateContentStream({
-            // Using the requested brand new stable Gemini 3.5 model!
             model: "gemini-3.1-flash-lite",
             contents: formattedContents,
             config: {
-                systemInstruction: `You are NextMind AI, a highly intelligent, next-generation premium AI assistant developed by Jayneel Badgujar. 
-                     
-                    Always provide exceptionally helpful, accurate, and beautifully formatted markdown responses.
-                     
-                   You can natively analyze, interpret, and discuss images (PNG, JPG, WEBP) and PDF documents shared by the user in the prompt.
-                    `,
+                systemInstruction,
+                temperature: targetTemp
             },
         });
 
@@ -128,5 +145,27 @@ export async function generateChatTitle(firstMessage) {
     } catch (error) {
         console.error("Failed to generate chat title with Google GenAI SDK:", error);
         return "New Chat";
+    }
+}
+
+/**
+ * Dynamic chat classification helper.
+ * Asks Gemini to classify the user's first prompt under #Coding, #Research, #Creative, or #General.
+ * 
+ * @param {string} firstMessage - The user's initial message
+ * @returns {Promise<string>} - Category tag, e.g. "#Coding"
+ */
+export async function generateChatCategory(firstMessage) {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: `Classify the following message into exactly one of these four tags: "#Coding" (if it contains code, debugging, script requests), "#Research" (if it is factual, informative, academic study/explainers), "#Creative" (if it is brainstorming, storytelling, email drafts, poems), or "#General" (for everything else). Reply with ONLY the tag name, e.g. "#Coding". Message: "${firstMessage}"`,
+        });
+        const tag = response.text.trim();
+        const allowedTags = ["#Coding", "#Research", "#Creative", "#General"];
+        return allowedTags.includes(tag) ? tag : "#General";
+    } catch (error) {
+        console.error("Failed to classify chat category with Google GenAI SDK:", error);
+        return "#General";
     }
 }

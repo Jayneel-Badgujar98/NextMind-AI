@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Mic, ArrowUp, Square, X, Camera, Image, FileText, AlertCircle } from 'lucide-react';
+import { useAuth } from '../../context/authContext';
 
 const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
+  const { user } = useAuth();
+  const enterSends = user?.enterSends !== undefined ? user.enterSends : true;
+
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState([]); // Array of { name, type, base64 }
   const [isRecording, setIsRecording] = useState(false);
@@ -12,6 +16,7 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
 
   // Initialize Speech Recognition
@@ -39,6 +44,14 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
   }, [showAttachMenu]);
+
+  // Auto-resize text area height dynamically based on content lines
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [input]);
 
   const handleMicToggle = () => {
     setMicError('');
@@ -173,7 +186,7 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
         )}
 
         {/* Gemini-Style Chat Capsule Card */}
-        <div className="flex flex-col bg-[#FFFFFF] dark:bg-[#181818] border border-slate-200 dark:border-white/10 rounded-[28px] p-3 shadow-md hover:shadow-lg focus-within:shadow-lg focus-within:border-slate-350 dark:focus-within:border-white/20 transition-all duration-300">
+        <div className="flex flex-col bg-[#FFFFFF] dark:bg-[#181818] border border-slate-200 dark:border-white/10 rounded-[28px] p-3 shadow-md hover:shadow-lg focus-within:shadow-lg focus-within:border-slate-300 dark:focus-within:border-white/20 transition-all duration-300">
           
           {/* Inner Previews Row (Only rendered when files are attached) */}
           {attachments.length > 0 && (
@@ -267,18 +280,25 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
               )}
             </div>
 
-            {/* Input Element */}
-            <input
-              type="text"
+            {/* Premium Auto-Resizing Textarea */}
+            <textarea
+              ref={textareaRef}
+              rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)} 
               placeholder={attachments.length > 0 ? "Describe these attachments..." : "Ask anything..."}
-              className="flex-1 bg-transparent border-none text-[15px] sm:text-[16px] text-slate-800 dark:text-white px-2 focus:outline-none placeholder-slate-400 disabled:opacity-50 min-w-0"
+              className="flex-1 bg-transparent border-none text-[15px] sm:text-[16px] text-slate-800 dark:text-white px-2 focus:outline-none placeholder-slate-400 disabled:opacity-50 min-w-0 resize-none max-h-28 py-2.5 leading-normal scrollbar-none font-medium align-middle"
               disabled={isLoading} 
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
+                if (e.key === 'Enter') {
+                  if (enterSends) {
+                    if (!e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }
+                  } else {
+                    // Enter key defaults to inserting a new line. Shift+Enter can still submit or act naturally
+                  }
                 }
               }}
             />

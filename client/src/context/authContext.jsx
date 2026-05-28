@@ -237,6 +237,38 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUserPreferences = async (preferences) => {
+    try {
+      setError(null);
+      const response = await authApi.put("/api/auth/preferences", preferences);
+      if (response.data?.success) {
+        setUser(response.data.user);
+        return { success: true, user: response.data.user };
+      }
+      return { success: false, message: "Failed to update preferences" };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || "Failed to update preferences.";
+      setError(errMsg);
+      return { success: false, message: errMsg };
+    }
+  };
+
+  const deleteUserAccount = async () => {
+    try {
+      setError(null);
+      const response = await authApi.delete("/api/auth/delete-account");
+      if (response.data?.success) {
+        setUser(null);
+        return { success: true, message: response.data.message };
+      }
+      return { success: false, message: "Failed to delete account" };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || "Failed to delete account.";
+      setError(errMsg);
+      return { success: false, message: errMsg };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -251,7 +283,9 @@ export const AuthProvider = ({ children }) => {
         verifyEmail,
         resendVerificationOtp,
         forgotPassword,
-        resetPassword
+        resetPassword,
+        updateUserPreferences,
+        deleteUserAccount
       }}
     >
       {children}

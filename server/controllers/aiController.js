@@ -118,6 +118,13 @@ export const chatWithAI = async (req, res) => {
         generateChatTitle(lastUserMessage.content).then(title => {
           Chat.findByIdAndUpdate(currentChat._id, { title }).catch(err => console.error("Title Update Error:", err));
         });
+
+        // Dynamic Chat Classification Categorizer using Gemini SDK
+        import("../config/aiService.js").then(({ generateChatCategory }) => {
+          generateChatCategory(lastUserMessage.content).then(tag => {
+            Chat.findByIdAndUpdate(currentChat._id, { categoryTag: tag }).catch(err => console.error("Category Tag Update Error:", err));
+          });
+        });
       } else {
         // Subsequent messages in existing chat session
         currentChat = await Chat.findById(chatId);
@@ -154,8 +161,8 @@ export const chatWithAI = async (req, res) => {
     res.setHeader("Transfer-Encoding", "chunked");
     res.setHeader("Connection", "keep-alive");
 
-    // Fetch AI response stream from Gemini
-    const responseStream = await getAIResponseStream(messages);
+    // Fetch AI response stream from Gemini (passes user profile for custom instructions & temperature)
+    const responseStream = await getAIResponseStream(messages, req.user);
 
     let fullAiResponse = "";
 

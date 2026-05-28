@@ -6,6 +6,7 @@ import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import SettingsModal from './SettingsModal';
 import { APP } from "../../utils/constants";
+import { useTheme } from '../../context/ThemeContext';
 
 const ChatContainer = ({ onNavigate }) => {
   const [activeModalTab, setActiveModalTab] = useState(null); // 'profile' | 'personalisation' | 'upgrade' | 'settings' | null
@@ -13,9 +14,10 @@ const ChatContainer = ({ onNavigate }) => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(null); // Track active chat session
-  
+
   // Abort controller for halting stream generation
   const abortControllerRef = useRef(null);
+  const { theme, toggleTheme } = useTheme();
 
   const handleNewChat = () => {
     setMessages([]);
@@ -31,7 +33,7 @@ const ChatContainer = ({ onNavigate }) => {
         credentials: "include"
       });
       if (!response.ok) throw new Error("Failed to fetch chat messages");
-      
+
       const data = await response.json();
       if (data.success) {
         setMessages(data.messages);
@@ -72,10 +74,10 @@ const ChatContainer = ({ onNavigate }) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Sync cookie sessions automatically
-        body: JSON.stringify({ 
-          messages: targetMessages, 
+        body: JSON.stringify({
+          messages: targetMessages,
           chatId: currentChatId,
-          overwriteMessages: overwriteMessages 
+          overwriteMessages: overwriteMessages
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -95,7 +97,7 @@ const ChatContainer = ({ onNavigate }) => {
 
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) break;
 
         const chunkText = decoder.decode(value, { stream: true });
@@ -128,17 +130,17 @@ const ChatContainer = ({ onNavigate }) => {
 
   const handleEditMessage = async (index, newText) => {
     const now = new Date().toISOString();
-    
+
     // Update content of edited message
-    const editedMsg = { 
-      ...messages[index], 
-      content: newText, 
-      timestamp: now 
+    const editedMsg = {
+      ...messages[index],
+      content: newText,
+      timestamp: now
     };
-    
+
     // Truncate everything after the edited message
     const customMessages = [...messages.slice(0, index), editedMsg];
-    
+
     // Resubmit using the overwriteMessages driver
     await handleSendMessage("", [], customMessages, true);
   };
@@ -146,7 +148,7 @@ const ChatContainer = ({ onNavigate }) => {
   const handleRegenerateResponse = async (index) => {
     // Truncate the assistant message at target index and everything after it
     const customMessages = messages.slice(0, index);
-    
+
     // Resubmit preceding user query using the overwriteMessages driver
     await handleSendMessage("", [], customMessages, true);
   };
@@ -160,9 +162,9 @@ const ChatContainer = ({ onNavigate }) => {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] dark:bg-[#0D0D0D] text-slate-800 dark:text-white overflow-hidden transition-all-ease">
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onNewChat={handleNewChat} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onNewChat={handleNewChat}
         onChatSelect={handleChatSelect}
         currentChatId={currentChatId}
         onNavigate={onNavigate}
@@ -172,17 +174,17 @@ const ChatContainer = ({ onNavigate }) => {
       <div className="flex-1 flex flex-col relative">
         <ChatHeader toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} onNavigate={onNavigate} />
 
-        <MessageList 
-          messages={messages} 
-          isLoading={isLoading} 
-          onSendMessage={handleSendMessage} 
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          onSendMessage={handleSendMessage}
           onEditMessage={handleEditMessage}
           onRegenerateResponse={handleRegenerateResponse}
         />
 
-        <ChatInput 
-          onSendMessage={handleSendMessage} 
-          isLoading={isLoading} 
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
           onStop={handleStop}
         />
       </div>
@@ -195,9 +197,9 @@ const ChatContainer = ({ onNavigate }) => {
       )}
 
       {activeModalTab && (
-        <SettingsModal 
-          activeTab={activeModalTab} 
-          onClose={() => setActiveModalTab(null)} 
+        <SettingsModal
+          activeTab={activeModalTab}
+          onClose={() => setActiveModalTab(null)}
           onNavigate={onNavigate}
         />
       )}

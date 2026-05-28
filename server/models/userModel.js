@@ -40,6 +40,30 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false // Set manually in DB to true to grant developer access
     },
+    language: {
+      type: String,
+      default: "English"
+    },
+    themePreference: {
+      type: String,
+      default: "System"
+    },
+    enterSends: {
+      type: Boolean,
+      default: true
+    },
+    temperature: {
+      type: Number,
+      default: 0.7
+    },
+    instructionsWho: {
+      type: String,
+      default: ""
+    },
+    instructionsHow: {
+      type: String,
+      default: ""
+    },
     otp: {
       type: String,
       default: null
