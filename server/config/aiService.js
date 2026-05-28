@@ -92,7 +92,7 @@ export async function getAIResponseStream(messagesArray, userObj = null) {
             };
         }));
 
-        let systemInstruction = `You are NextMind AI, a highly intelligent, next-generation premium AI assistant developed by Jayneel Badgujar and Trained by Google . 
+        let systemInstruction = `You are NextMind AI, a highly intelligent, next-generation premium AI assistant developed by Jayneel Badgujar  . 
              
            `;
 
