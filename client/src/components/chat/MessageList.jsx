@@ -1,11 +1,11 @@
 // src/components/chat/MessageList.jsx
 import React, { useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
-import TypingIndicator from './TypingIndicator';
+import ThinkingIndicator from './ThinkingIndicator';
 import { Compass, Sparkles, Code, MessageSquare, Terminal } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
-const MessageList = ({ messages, isLoading, onSendMessage, onEditMessage, onRegenerateResponse }) => {
+const MessageList = ({ messages, isLoading, thinkingStatus, onSendMessage, onEditMessage, onRegenerateResponse }) => {
   const endOfMessagesRef = useRef(null);
   const { theme, toggleTheme } = useTheme();
 
@@ -104,24 +104,28 @@ const MessageList = ({ messages, isLoading, onSendMessage, onEditMessage, onRege
 
           </div>
         ) : (
-          messages.map((msg, index) => (
-            <MessageBubble
-              key={index}
-              index={index}
-              message={msg.content}
-              isAI={msg.role === 'assistant'}
-              timestamp={msg.timestamp}
-              attachments={msg.attachments}
-              onEditMessage={onEditMessage}
-              onRegenerateResponse={onRegenerateResponse}
-              isLastAI={msg.role === 'assistant' && index === messages.length - 1}
-            />
-          ))
+          messages.map((msg, index) => {
+            const isLastEmptyAssistant = msg.role === 'assistant' && msg.content === '' && index === messages.length - 1;
+            if (isLastEmptyAssistant && isLoading) return null;
+            return (
+              <MessageBubble
+                key={index}
+                index={index}
+                message={msg.content}
+                isAI={msg.role === 'assistant'}
+                timestamp={msg.timestamp}
+                attachments={msg.attachments}
+                onEditMessage={onEditMessage}
+                onRegenerateResponse={onRegenerateResponse}
+                isLastAI={msg.role === 'assistant' && index === messages.length - 1}
+              />
+            );
+          })
         )}
 
         {isLoading && (
           <div className="flex w-full justify-start mb-6">
-            <TypingIndicator />
+            <ThinkingIndicator status={thinkingStatus} />
           </div>
         )}
         <div ref={endOfMessagesRef} />

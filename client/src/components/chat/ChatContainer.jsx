@@ -13,6 +13,7 @@ const ChatContainer = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState("");
   const [currentChatId, setCurrentChatId] = useState(null); // Track active chat session
 
   // Abort controller for halting stream generation
@@ -62,6 +63,7 @@ const ChatContainer = ({ onNavigate }) => {
 
     setMessages(targetMessages);
     setIsLoading(true);
+    setThinkingStatus("NextMind is thinking");
 
     // 2. Add assistant response placeholder
     setMessages((prev) => [...prev, { role: "assistant", content: "", timestamp: now }]);
@@ -94,21 +96,67 @@ const ChatContainer = ({ onNavigate }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let aiFullResponse = "";
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) break;
 
-        const chunkText = decoder.decode(value, { stream: true });
-        aiFullResponse += chunkText;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || "";
 
-        // Update last message in array (the assistant placeholder)
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].content = aiFullResponse;
-          return newMessages;
-        });
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (trimmed.startsWith("data: ")) {
+            const dataStr = trimmed.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.type === "text") {
+                aiFullResponse += data.content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1].content = aiFullResponse;
+                  return newMessages;
+                });
+              } else if (data.type === "status") {
+                setThinkingStatus(data.status);
+              } else if (data.type === "error") {
+                aiFullResponse = data.message || "Server encountered runtime errors.";
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1].content = aiFullResponse;
+                  return newMessages;
+                });
+              }
+            } catch (err) {
+              console.error("Error parsing SSE line:", dataStr, err);
+            }
+          }
+        }
+      }
+
+      // Parse remaining buffer if it contains complete SSE event
+      if (buffer.trim().startsWith("data: ")) {
+        const dataStr = buffer.trim().slice(6);
+        try {
+          const data = JSON.parse(dataStr);
+          if (data.type === "text") {
+            aiFullResponse += data.content;
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              newMessages[newMessages.length - 1].content = aiFullResponse;
+              return newMessages;
+            });
+          } else if (data.type === "status") {
+            setThinkingStatus(data.status);
+          }
+        } catch (err) {
+          console.error("Error parsing remaining SSE buffer:", dataStr, err);
+        }
       }
 
     } catch (error) {
@@ -124,6 +172,7 @@ const ChatContainer = ({ onNavigate }) => {
       }
     } finally {
       setIsLoading(false);
+      setThinkingStatus("");
       abortControllerRef.current = null;
     }
   };
@@ -177,6 +226,7 @@ const ChatContainer = ({ onNavigate }) => {
         <MessageList
           messages={messages}
           isLoading={isLoading}
+          thinkingStatus={thinkingStatus}
           onSendMessage={handleSendMessage}
           onEditMessage={handleEditMessage}
           onRegenerateResponse={handleRegenerateResponse}

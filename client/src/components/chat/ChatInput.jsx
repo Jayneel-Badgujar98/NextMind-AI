@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, ArrowUp, Square, X, Camera, Image, FileText, AlertCircle } from 'lucide-react';
+import { Plus, ArrowUp, Square, X, Camera, Image, FileText } from 'lucide-react';
 import { useAuth } from '../../context/authContext';
 
 const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
@@ -8,8 +8,6 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
 
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState([]); // Array of { name, type, base64 }
-  const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -17,10 +15,6 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
   const photoInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const textareaRef = useRef(null);
-  const recognitionRef = useRef(null);
-
-  // Initialize Speech Recognition
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   useEffect(() => {
     const handleResize = () => {
@@ -29,9 +23,6 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
     };
   }, []);
 
@@ -53,56 +44,7 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
     }
   }, [input]);
 
-  const handleMicToggle = () => {
-    setMicError('');
-    if (isRecording) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      setIsRecording(false);
-      return;
-    }
 
-    if (!SpeechRecognition) {
-      setMicError('Speech recognition is not supported in this browser.');
-      setTimeout(() => setMicError(''), 4000);
-      return;
-    }
-
-    try {
-      const rec = new SpeechRecognition();
-      rec.continuous = false;
-      rec.interimResults = false;
-      rec.lang = 'en-US';
-
-      rec.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setInput(prev => prev + (prev ? ' ' : '') + transcript);
-        }
-      };
-
-      rec.onerror = (e) => {
-        console.error("Speech recognition error:", e);
-        if (e.error === 'not-allowed') {
-          setMicError('Microphone permission blocked.');
-          setTimeout(() => setMicError(''), 4000);
-        }
-        setIsRecording(false);
-      };
-
-      rec.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognitionRef.current = rec;
-      rec.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Failed to start Speech Recognition:", err);
-      setIsRecording(false);
-    }
-  };
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -141,10 +83,6 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
       onSendMessage(input, attachments);
       setInput('');
       setAttachments([]);
-      if (isRecording && recognitionRef.current) {
-        recognitionRef.current.stop();
-        setIsRecording(false);
-      }
     }
   };
 
@@ -178,12 +116,7 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
       />
 
       <div className="max-w-3xl mx-auto flex flex-col gap-2 relative">
-        {micError && (
-          <div className="flex items-center gap-2 p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl animate-fade-in self-center mb-1">
-            <AlertCircle size={14} className="shrink-0" />
-            <span>{micError}</span>
-          </div>
-        )}
+
 
         {/* Gemini-Style Chat Capsule Card */}
         <div className="flex flex-col bg-[#FFFFFF] dark:bg-[#181818] border border-slate-200 dark:border-white/10 rounded-[28px] p-3 shadow-md hover:shadow-lg focus-within:shadow-lg focus-within:border-slate-300 dark:focus-within:border-white/20 transition-all duration-300">
@@ -303,21 +236,7 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
               }}
             />
 
-            {/* Microphone button inside input capsule */}
-            {!isLoading && (
-              <button 
-                type="button" 
-                onClick={handleMicToggle}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer ${
-                  isRecording 
-                    ? 'text-red-500 bg-red-500/10 border border-red-500/20 animate-pulse' 
-                    : 'text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5'
-                }`}
-                title={isRecording ? "Listening... click to stop" : "Use voice input"}
-              >
-                <Mic size={20} />
-              </button>
-            )}
+
 
             {/* Send circle Up Arrow button / Stop button */}
             {isLoading ? (

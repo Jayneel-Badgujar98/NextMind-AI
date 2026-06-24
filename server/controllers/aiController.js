@@ -1,203 +1,237 @@
-import { getAIResponseStream, generateChatTitle } from "../config/aiService.js";
+import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { GoogleGenAI } from "@google/genai";
 import Chat from "../models/chatModel.js";
-import User from "../models/userModel.js";
-import fs from "fs";
-import path from "path";
+import { mainAgent } from "../AI/Main Agent/main.js";
 import { cloudinary, isConfigured } from "../config/cloudinary.js";
+import axios from "axios";
+import { redisClient } from "../lib/redis.js";
 
-// Helper function to process raw base64 attachments on-the-fly
-const processBase64Attachments = async (messagesArray, reqProtocol, reqHost) => {
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-
-  for (const msg of messagesArray) {
-    if (msg.attachments && Array.isArray(msg.attachments)) {
-      for (const att of msg.attachments) {
-        if (att.base64) {
-          if (isConfigured) {
-            // Production Flow: Upload to Cloudinary CDN
-            try {
-              const uploadResult = await cloudinary.uploader.upload(att.base64, {
-                resource_type: "auto", // Automatically handles images, PDFs, etc.
-                folder: "nextmind_attachments",
-              });
-              att.url = uploadResult.secure_url;
-              // Keep att.base64 so that getAIResponseStream can use it without downloading
-            } catch (cloudinaryError) {
-              console.error("Cloudinary upload failed, falling back to local disk storage:", cloudinaryError);
-              await saveFileToLocalDisk(att, uploadsDir, reqProtocol, reqHost);
-            }
-          } else {
-            // Development Flow: Save to local disk
-            await saveFileToLocalDisk(att, uploadsDir, reqProtocol, reqHost);
-          }
-        }
-      }
+// Helper 1: Attachments ko download ya base64 parse karna LangChain standard format ke liye
+const getAttachmentData = async (attachment) => {
+  if (attachment.base64) return attachment.base64.split(",")[1] || attachment.base64;
+  if (attachment.url) {
+    try {
+      const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
+      return Buffer.from(response.data, 'binary').toString('base64');
+    } catch (err) {
+      console.error(`Attachment download failed: ${attachment.url}`, err.message);
     }
   }
+  return null;
 };
 
-// Fallback helper to save decoded base64 buffers directly to server's static directory
-const saveFileToLocalDisk = async (att, uploadsDir, reqProtocol, reqHost) => {
-  const matches = att.base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  let ext = "bin";
-  let bufferData;
 
-  if (matches && matches.length === 3) {
-    const mime = matches[1];
-    bufferData = Buffer.from(matches[2], "base64");
-    ext = mime.split("/")[1] || "bin";
-    if (ext === "jpeg") ext = "jpg";
-  } else {
-    bufferData = Buffer.from(att.base64, "base64");
-    ext = att.type ? att.type.split("/")[1] : "bin";
+// Helper 2: Repetitive Cloudinary upload code ko single loop mein manage karna (Fixes attachments issue)
+const processIncomingAttachments = async (attachments) => {
+  const processed = [];
+  if (!attachments || attachments.length === 0) return processed;
+
+  for (const att of attachments) {
+    let finalUrl = att.url || "";
+    if (att.base64 && isConfigured) {
+      try {
+        const uploadRes = await cloudinary.uploader.upload(att.base64, { folder: "nextmind_chats" });
+        finalUrl = uploadRes.secure_url;
+      } catch (err) {
+        console.error("Cloudinary upload error:", err);
+      }
+    }
+    processed.push({ name: att.name, type: att.type, url: finalUrl });
   }
-
-  const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
-  const filePath = path.join(uploadsDir, fileName);
-  fs.writeFileSync(filePath, bufferData);
-
-  att.url = `${reqProtocol}://${reqHost}/uploads/${fileName}`;
-  // Keep att.base64 so that getAIResponseStream can use it without downloading
+  return processed;
 };
 
-// Helper to strip base64 from messages array when saving to MongoDB
-const sanitizeMessagesForDB = (messagesArray) => {
-  return messagesArray.map(msg => ({
-    role: msg.role,
-    content: msg.content,
-    attachments: msg.attachments ? msg.attachments.map(att => ({
-      name: att.name,
-      type: att.type,
-      url: att.url
-    })) : [],
-    timestamp: msg.timestamp || new Date()
-  }));
+// Helper 3: Asynchronously generate chat titles
+const generateAndSaveTitle = async (chatId, firstMessageContent) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) return;
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: `Generate a very short topic title (max 3-5 words) for: "${firstMessageContent}". Just return clean text without markdown or quotes.`,
+    });
+    if (response.text) await Chat.findByIdAndUpdate(chatId, { title: response.text.trim() });
+  } catch (err) {
+    console.error("Title generation failed:", err);
+  }
 };
 
-// @desc    Chat with NextMind AI (Handles text, images, PDFs, editing, and regenerations)
+// @desc    Chat with NextMind AI agent with live event streaming and dynamic attachments processing
+// @route   POST /api/ai/chat
+// @desc    Chat with NextMind AI agent (handles history, Redis query/chat caching, and live SSE streams)
 // @route   POST /api/ai/chat
 export const chatWithAI = async (req, res) => {
   try {
-    const { messages, chatId, overwriteMessages } = req.body;
+    let { messages, chatId, overwriteMessages } = req.body;
 
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ success: false, message: "Messages array is required" });
-    }
+    if (!messages && req.body.query) messages = [{ role: "user", content: req.body.query }];
+    if (!messages || messages.length === 0) return res.status(400).json({ success: false, message: "No messages provided." });
 
-    let currentChat;
+    const lastUserMsg = messages[messages.length - 1];
+    const lastMsgContent = lastUserMsg?.content || "";
 
-    if (req.user) {
-      // 1. Process base64 attachments on-the-fly (saves to Cloudinary or disk, and sets url)
-      await processBase64Attachments(messages, req.protocol, req.get("host"));
+    let chat = null;
+    const redisChatKey = chatId ? `chat:${chatId}` : null;
 
-      const lastUserMessage = messages[messages.length - 1];
-
-      if (!chatId) {
-        // Create new chat session for authenticated user
-        currentChat = await Chat.create({
-          userId: req.user._id,
-          messages: [{
-            role: "user",
-            content: lastUserMessage.content,
-            attachments: lastUserMessage.attachments ? lastUserMessage.attachments.map(a => ({
-              name: a.name,
-              type: a.type,
-              url: a.url
-            })) : []
-          }]
-        });
-        
-        // Expose new chatId so client captures it
-        res.setHeader("x-chat-id", currentChat._id.toString());
-        res.setHeader("Access-Control-Expose-Headers", "x-chat-id");
-
-        // Generate title dynamically in the background
-        generateChatTitle(lastUserMessage.content).then(title => {
-          Chat.findByIdAndUpdate(currentChat._id, { title }).catch(err => console.error("Title Update Error:", err));
-        });
-
-        // Dynamic Chat Classification Categorizer using Gemini SDK
-        import("../config/aiService.js").then(({ generateChatCategory }) => {
-          generateChatCategory(lastUserMessage.content).then(tag => {
-            Chat.findByIdAndUpdate(currentChat._id, { categoryTag: tag }).catch(err => console.error("Category Tag Update Error:", err));
-          });
-        });
+    // 1. 🔥 REDIS CHAT HISTORY CACHING LAYER (MongoDB bypass optimization)
+    if (req.user && chatId) {
+      // Pehle check karo ki kya is chatId ki poori history Redis mein hai?
+      const cachedChatData = await redisClient.get(redisChatKey);
+      
+      if (cachedChatData) {
+        console.log(`[Cache Hit] Retrieved full chat history from Redis for ID: ${chatId}`);
+        chat = JSON.parse(cachedChatData);
       } else {
-        // Subsequent messages in existing chat session
-        currentChat = await Chat.findById(chatId);
-        if (!currentChat) {
-          return res.status(404).json({ success: false, message: "Chat not found" });
-        }
+        // Cache miss hua, toh MongoDB se nikal kar Redis mein cache karo
+        console.log(`[Cache Miss] Fetching chat from MongoDB for ID: ${chatId}`);
+        chat = await Chat.findOne({ _id: chatId, userId: req.user._id });
+        if (!chat) return res.status(404).json({ success: false, message: "Chat not found." });
         
-        // Safety check
-        if (currentChat.userId.toString() !== req.user._id.toString()) {
-          return res.status(403).json({ success: false, message: "Unauthorized access to this chat" });
-        }
-
-        if (overwriteMessages) {
-          // Truncate/Overwrite messages history (for edit message or regenerate response flows)
-          currentChat.messages = sanitizeMessagesForDB(messages);
-        } else {
-          // Push new user message
-          currentChat.messages.push({
-            role: "user",
-            content: lastUserMessage.content,
-            attachments: lastUserMessage.attachments ? lastUserMessage.attachments.map(a => ({
-              name: a.name,
-              type: a.type,
-              url: a.url
-            })) : []
-          });
-        }
-        await currentChat.save();
+        // Cache it for 24 hours
+        await redisClient.set(redisChatKey, JSON.stringify(chat), { EX: 86400 });
       }
-    }
 
-    // Headers for SSE (Server-Sent Events) streaming
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Transfer-Encoding", "chunked");
-    res.setHeader("Connection", "keep-alive");
-
-    // Fetch AI response stream from Gemini (passes user profile for custom instructions & temperature)
-    const responseStream = await getAIResponseStream(messages, req.user);
-
-    let fullAiResponse = "";
-
-    // Read stream chunks
-    for await (const chunk of responseStream) {
-      const chunkText = chunk.text || "";
-      fullAiResponse += chunkText;
-      res.write(chunkText); 
-    }
-
-    // Guard against quota/safety blocks yielding empty responses
-    if (!fullAiResponse.trim()) {
-      throw new Error("AI generated an empty response. This usually indicates an API block or connection failure.");
-    }
-
-    // Save final AI response to DB
-    if (req.user && currentChat) {
+      // Ab naye incoming messages ko process aur insert karo (In-memory & DB sync)
       if (overwriteMessages) {
-        // Re-locate chat instance to avoid duplicate race overrides
-        currentChat = await Chat.findById(currentChat._id);
-        currentChat.messages = sanitizeMessagesForDB(messages);
+        chat.messages = await Promise.all(messages.map(async (msg) => ({
+          role: msg.role,
+          content: msg.content,
+          attachments: await processIncomingAttachments(msg.attachments),
+          timestamp: msg.timestamp || new Date()
+        })));
+      } else {
+        chat.messages.push({
+          role: "user",
+          content: lastMsgContent,
+          attachments: await processIncomingAttachments(lastUserMsg.attachments),
+          timestamp: lastUserMsg.timestamp || new Date()
+        });
       }
-      currentChat.messages.push({ role: "assistant", content: fullAiResponse });
-      await currentChat.save();
+
+      // Sync modifications to database asynchronously to avoid blocking the thread
+      Chat.updateOne({ _id: chat._id }, { $set: { messages: chat.messages } }).catch(e => console.error("DB Async Sync failed:", e));
+      // Update the cache instantly with 24 hours expiry
+      await redisClient.set(redisChatKey, JSON.stringify(chat), { EX: 86400 });
+
+    } else if (req.user && !chatId) {
+      // Naya chat room creation handler (Pehle jaisa hi)
+      const attachments = await processIncomingAttachments(lastUserMsg.attachments);
+      chat = new Chat({
+        userId: req.user._id,
+        title: "New Chat",
+        messages: [{ role: "user", content: lastMsgContent, attachments, timestamp: new Date() }]
+      });
+      await chat.save();
+      
+      // Naye chat ko bhi Redis cache mein push karo
+      const newChatKey = `chat:${chat._id}`;
+      await redisClient.set(newChatKey, JSON.stringify(chat), { EX: 86400 });
+      generateAndSaveTitle(chat._id, lastMsgContent).catch(e => console.error(e));
     }
 
-    // Terminate response stream cleanly
+    // 2. Map conversation logs into LangChain format
+    const mappedMessages = [];
+    if (req.user && (req.user.instructionsWho || req.user.instructionsHow)) {
+      const memory = `User Profile:\n${req.user.instructionsWho || ""}\n\nStyle Rules:\n${req.user.instructionsHow || ""}`;
+      mappedMessages.push(new SystemMessage(`Remember these instructions for the conversation:\n${memory}`));
+    }
+
+    for (const msg of messages) {
+      if (msg.role === "assistant") {
+        mappedMessages.push(new AIMessage(msg.content));
+      } else {
+        if (msg.attachments && msg.attachments.length > 0) {
+          const parts = [{ type: "text", text: msg.content || "" }];
+          for (const att of msg.attachments) {
+            if (att.type?.startsWith("image/")) {
+              const base64Data = await getAttachmentData(att);
+              if (base64Data) parts.push({ type: "image", mimeType: att.type, data: base64Data });
+            }
+          }
+          mappedMessages.push(new HumanMessage({ contentBlocks: parts }));
+        } else {
+          mappedMessages.push(new HumanMessage(msg.content));
+        }
+      }
+    }
+
+    // 3. Setup Response Stream Headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Expose-Headers", "x-chat-id");
+    if (chat) res.setHeader("x-chat-id", chat._id.toString());
+
+    // 4. 🔥 GLOBAL RESPONSE TEXT REDIS CACHE LOOKUP
+    if (lastMsgContent) {
+      const cachedAiResponse = await redisClient.get(`query:${lastMsgContent}`);
+      if (cachedAiResponse) {
+        console.log(`[Query Cache Hit] Serving instant result from Redis for: "${lastMsgContent}"`);
+        
+        if (chat) {
+          chat.messages.push({ role: "assistant", content: cachedAiResponse, timestamp: new Date() });
+          Chat.updateOne({ _id: chat._id }, { $set: { messages: chat.messages } }).catch(e => console.error(e));
+          if (redisChatKey) await redisClient.set(redisChatKey, JSON.stringify(chat), { EX: 86400 });
+        }
+
+        res.write(`data: ${JSON.stringify({ type: "text", content: cachedAiResponse })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        return res.end();
+      }
+    }
+
+    // 5. Trigger streamEvents to fetch agent states if cache missed
+    console.log(`[aiController] Extracting events stream for ${mappedMessages.length} messages`);
+    const eventStream = await mainAgent.streamEvents({ messages: mappedMessages }, { version: "v2" });
+
+    let fullAIResponseText = "";
+
+    for await (const event of eventStream) {
+      const eventType = event.event;
+      const eventName = event.name;
+
+      if (eventType === "on_chat_model_stream") {
+        const content = event.data.chunk?.content;
+        if (content) {
+          let textVal = typeof content === "string" ? content : (Array.isArray(content) ? content.map(b => typeof b === "string" ? b : (b?.text || "")).join("") : (content.text || ""));
+          if (textVal) {
+            fullAIResponseText += textVal;
+            res.write(`data: ${JSON.stringify({ type: "text", content: textVal })}\n\n`);
+          }
+        }
+      } 
+      else if (eventType === "on_tool_start") {
+        const friendlyName = eventName === "web_search" ? "Google Search" : eventName === "deep_research" ? "Deep Research" : eventName;
+        res.write(`data: ${JSON.stringify({ type: "status", status: `Running ${friendlyName}...` })}\n\n`);
+      }
+      else if (eventType === "on_tool_end") {
+        const friendlyName = eventName === "web_search" ? "Google Search" : eventName === "deep_research" ? "Deep Research" : eventName;
+        res.write(`data: ${JSON.stringify({ type: "status", status: `Finished executing ${friendlyName}.` })}\n\n`);
+      }
+    }
+
+    // 6. 🔥 Save AI response and update inside both MongoDB and synchronized Redis structures
+    if (chat && fullAIResponseText) {
+      chat.messages.push({ role: "assistant", content: fullAIResponseText, timestamp: new Date() });
+      
+      // Update Database and cache records simultaneously
+      Chat.updateOne({ _id: chat._id }, { $set: { messages: chat.messages } }).catch(e => console.error(e));
+      if (redisChatKey) await redisClient.set(redisChatKey, JSON.stringify(chat), { EX: 86400 });
+
+      if (lastMsgContent) {
+        // Save the semantic prompt cache under query namespace to keep things separate
+        await redisClient.set(`query:${lastMsgContent}`, fullAIResponseText, { EX: 86400 });
+        console.log(`[Cache Sync Completed] Query responses and histories are safely stored in memory.`);
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
 
-  } catch (error) {
-    console.error("Chat Controller Error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, message: error.message });
-    } else {
-      res.end(); // If stream had already started, just close connection
-    }
+  } catch (err) {
+    console.error("Critical error inside controller layer:", err);
+    res.write(`data: ${JSON.stringify({ type: "error", message: "Server encountered runtime errors." })}\n\n`);
+    res.end();
   }
 };

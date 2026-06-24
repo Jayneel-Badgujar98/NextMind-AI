@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, MessageSquare, Settings, Loader2, Sun, Moon, MoreHorizontal, Shield, LogOut, Compass, Search, User, Sliders, Sparkles } from 'lucide-react';
+import { Plus, MessageSquare, Settings, Loader2, Sun, Moon, MoreHorizontal, Shield, LogOut, Compass, Search, User } from 'lucide-react';
 import { APP } from "../../utils/constants";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/authContext";
@@ -240,7 +240,6 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
               </span>
             </div>
 
-            {/* Dropdown Options */}
             {/* 1. User Profile */}
             <button 
               onClick={() => {
@@ -258,48 +257,7 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
               <span className="text-sm">User Profile</span>
             </button>
 
-            {/* 2. Personalisation */}
-            <button 
-              onClick={() => {
-                setIsDropdownOpen(false);
-                if (onOpenSettingsTab) {
-                  onOpenSettingsTab('personalisation');
-                } else {
-                  alert("Please log in to customize NextMind AI.");
-                  onNavigate('signin');
-                }
-              }}
-              className="flex items-center gap-3 w-full h-[40px] px-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all duration-150 font-medium text-left cursor-pointer"
-            >
-              <Sliders size={16} />
-              <span className="text-sm">Personalisation</span>
-            </button>
-
-            {/* 3. Upgrade Plan */}
-            <button 
-              onClick={() => {
-                setIsDropdownOpen(false);
-                if (onOpenSettingsTab) {
-                  onOpenSettingsTab('upgrade');
-                } else {
-                  alert("Please log in to view upgrade plans.");
-                  onNavigate('signin');
-                }
-              }}
-              className="flex items-center justify-between w-full h-[40px] px-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all duration-150 font-medium cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles size={16} className="text-amber-500" />
-                <span className="text-sm">Upgrade Plan</span>
-              </div>
-              {user && !user.isDev && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 uppercase tracking-wide">
-                  Pro
-                </span>
-              )}
-            </button>
-
-            {/* 4. Settings */}
+            {/* 2. Settings */}
             <button 
               onClick={() => {
                 setIsDropdownOpen(false);
@@ -316,7 +274,7 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
               <span className="text-sm">Settings</span>
             </button>
 
-            {/* 5. Appearance */}
+            {/* 3. Appearance */}
             <button 
               onClick={() => {
                 toggleTheme();
