@@ -221,7 +221,8 @@ export const chatWithAI = async (req, res) => {
 
       if (lastMsgContent) {
         // Save the semantic prompt cache under query namespace to keep things separate
-        await redisClient.set(`query:${lastMsgContent}`, fullAIResponseText, { EX: 86400 });
+
+        await redisClient.set(`query:${lastMsgContent}`, fullAIResponseText, { EX: 86400 }); // TEMPORARILY DISABLED
         console.log(`[Cache Sync Completed] Query responses and histories are safely stored in memory.`);
       }
     }

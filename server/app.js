@@ -1,6 +1,7 @@
 import express from "express" ;
 import cors from "cors" ;
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import aiRoutes from "./routes/aiRoutes.js"
 import chatRoutes from "./routes/chatRoutes.js"
 import authRoutes from "./routes/authRoutes.js"
@@ -8,6 +9,11 @@ import authRoutes from "./routes/authRoutes.js"
 import path from "path";
 
 const app = express() ;
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false,
+}));
 
 const allowedOrigins = [
   "http://localhost:5173",

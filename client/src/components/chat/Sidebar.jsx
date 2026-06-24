@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, MessageSquare, Settings, Loader2, Sun, Moon, MoreHorizontal, Shield, LogOut, Compass, Search, User } from 'lucide-react';
+import { Plus, MessageSquare, Settings, Loader2, Sun, Moon, MoreHorizontal, Shield, LogOut, Compass, Search, User, Pin, Trash2, Edit3 } from 'lucide-react';
 import { APP } from "../../utils/constants";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/authContext";
@@ -13,6 +13,10 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const [activeMenuChatId, setActiveMenuChatId] = useState(null);
+  const [editingChatId, setEditingChatId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const actionsMenuRef = useRef(null);
   const dropdownRef = useRef(null);
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
@@ -46,11 +50,14 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
     fetchChatHistory();
   }, [currentChatId, user]);
 
-  // Click outside handler to close the profile dropdown popover
+  // Click outside handler to close the profile dropdown popover & chat actions menu
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
+      }
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target)) {
+        setActiveMenuChatId(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -58,6 +65,59 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const handleRename = async (chatId, newTitle) => {
+    if (!newTitle.trim()) return;
+    try {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}/rename`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim() }),
+        credentials: "include"
+      });
+      if (response.ok) {
+        setChatHistory(prev => prev.map(chat => chat._id === chatId ? { ...chat, title: newTitle.trim() } : chat));
+      }
+    } catch (error) {
+      console.error("Failed to rename chat:", error);
+    } finally {
+      setEditingChatId(null);
+    }
+  };
+
+  const handleDelete = async (chatId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this chat?")) return;
+    try {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}`, {
+        method: 'DELETE',
+        credentials: "include"
+      });
+      if (response.ok) {
+        setChatHistory(prev => prev.filter(chat => chat._id !== chatId));
+        if (currentChatId === chatId) {
+          onNewChat(); // Reset active chat
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete chat:", error);
+    }
+  };
+
+  const handleTogglePin = async (chatId, e) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch(`${APP.BACKEND_URL}${APP.CHAT_HISTORY}/${chatId}/pin`, {
+        method: 'PATCH',
+        credentials: "include"
+      });
+      if (response.ok) {
+        fetchChatHistory();
+      }
+    } catch (error) {
+      console.error("Failed to toggle pin:", error);
+    }
+  };
 
   const startResizing = useCallback((e) => {
     e.preventDefault();
@@ -123,7 +183,7 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
       <div className="px-4 pt-2">
         <button 
           onClick={onNewChat} 
-          className="flex items-center justify-between w-full h-12 bg-[#10A37F] hover:bg-[#0E8F6E] text-white px-4 rounded-2xl transition-all duration-200 font-bold active:scale-[0.98] shadow-sm hover:shadow-md cursor-pointer"
+          className="flex items-center justify-between w-full h-12 bg-[#0B755A] hover:bg-[#09634C] text-white px-4 rounded-2xl transition-all duration-200 font-bold active:scale-[0.98] shadow-sm hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <Plus size={18} />
@@ -171,27 +231,109 @@ const Sidebar = ({ isOpen, onNewChat, onChatSelect, currentChatId, onNavigate, o
               </p>
             )}
 
-            {filteredHistory.map((chat) => (
-              <button 
-                key={chat._id}
-                onClick={() => onChatSelect(chat._id)}
-                className={`flex items-center justify-between w-full h-[44px] text-left px-3 rounded-xl transition-all-ease group ${
-                  currentChatId === chat._id 
-                    ? 'bg-slate-100 dark:bg-[#202020] text-slate-900 dark:text-white font-semibold' 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#202020] hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-3 truncate">
-                  <MessageSquare size={18} className={currentChatId === chat._id ? 'text-slate-900 dark:text-white shrink-0' : 'text-slate-400 shrink-0 group-hover:text-slate-900 dark:group-hover:text-white transition-colors'} />
-                  <span className="truncate text-[15px]">{chat.title || "New Chat"}</span>
+            {filteredHistory.map((chat) => {
+              const isEditing = editingChatId === chat._id;
+              const isMenuOpen = activeMenuChatId === chat._id;
+
+              return (
+                <div
+                  key={chat._id}
+                  onClick={() => !isEditing && onChatSelect(chat._id)}
+                  className={`group relative flex items-center justify-between w-full h-[44px] px-3 rounded-xl transition-all duration-200 select-none cursor-pointer ${
+                    currentChatId === chat._id 
+                      ? 'bg-slate-100 dark:bg-[#202020] text-slate-900 dark:text-white font-semibold' 
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#202020] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 truncate flex-1 pr-6">
+                    <MessageSquare size={18} className={currentChatId === chat._id ? 'text-slate-900 dark:text-white shrink-0' : 'text-slate-400 shrink-0 group-hover:text-slate-900 dark:group-hover:text-white transition-colors'} />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleRename(chat._id, editTitle)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRename(chat._id, editTitle);
+                          if (e.key === 'Escape') setEditingChatId(null);
+                        }}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-white dark:bg-zinc-800 text-slate-900 dark:text-white text-[14px] px-1.5 py-0.5 rounded border border-[#10A37F] focus:outline-none"
+                      />
+                    ) : (
+                      <span className="truncate text-[15px] flex items-center gap-1.5">
+                        {chat.isPinned && <Pin size={12} className="text-[#10A37F] rotate-45 shrink-0" />}
+                        {chat.title || "New Chat"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Options & Date area */}
+                  <div className="absolute right-3 flex items-center gap-1">
+                    {!isEditing && (
+                      <>
+                        {chat.updatedAt && (
+                          <span className="text-[11px] opacity-60 group-hover:hidden">
+                            {formatRelativeTime(chat.updatedAt)}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuChatId(isMenuOpen ? null : chat._id);
+                          }}
+                          className="hidden group-hover:flex items-center justify-center w-6 h-6 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Actions Dropdown Menu */}
+                  {isMenuOpen && (
+                    <div 
+                      ref={actionsMenuRef}
+                      className="absolute right-3 top-10 z-40 bg-white dark:bg-[#181818] border border-slate-200 dark:border-white/10 p-1 rounded-xl shadow-xl flex flex-col min-w-[120px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => {
+                          setEditingChatId(chat._id);
+                          setEditTitle(chat.title || "New Chat");
+                          setActiveMenuChatId(null);
+                        }}
+                        className="flex items-center gap-2 w-full h-[32px] px-2 text-[13px] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-left transition-all"
+                      >
+                        <Edit3 size={13} />
+                        <span>Rename</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          handleTogglePin(chat._id, e);
+                          setActiveMenuChatId(null);
+                        }}
+                        className="flex items-center gap-2 w-full h-[32px] px-2 text-[13px] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-left transition-all"
+                      >
+                        <Pin size={13} className={chat.isPinned ? "rotate-45" : ""} />
+                        <span>{chat.isPinned ? "Unpin" : "Pin"}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          handleDelete(chat._id, e);
+                          setActiveMenuChatId(null);
+                        }}
+                        className="flex items-center gap-2 w-full h-[32px] px-2 text-[13px] text-red-500 hover:bg-red-500/10 rounded-lg text-left transition-all"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {chat.updatedAt && (
-                  <span className="text-[11px] opacity-60 shrink-0 ml-2">
-                    {formatRelativeTime(chat.updatedAt)}
-                  </span>
-                )}
-              </button>
-            ))}
+              );
+            })}
           </>
         ) : (
           /* Premium Promo Card for Guest Users */

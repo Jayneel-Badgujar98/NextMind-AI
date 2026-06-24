@@ -91,9 +91,9 @@ const MessageList = ({ messages, isLoading, thinkingStatus, onSendMessage, onEdi
                     {item.icon}
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800 dark:text-white mb-1 group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-1 group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
                       {item.title}
-                    </h4>
+                    </h3>
                     <p className="text-xs text-slate-500 dark:text-zinc-400 leading-tight">
                       {item.desc}
                     </p>

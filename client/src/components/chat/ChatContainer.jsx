@@ -220,7 +220,7 @@ const ChatContainer = ({ onNavigate }) => {
         onOpenSettingsTab={(tab) => setActiveModalTab(tab)}
       />
 
-      <div className="flex-1 flex flex-col relative">
+      <main className="flex-1 flex flex-col relative">
         <ChatHeader toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} onNavigate={onNavigate} />
 
         <MessageList
@@ -237,7 +237,7 @@ const ChatContainer = ({ onNavigate }) => {
           isLoading={isLoading}
           onStop={handleStop}
         />
-      </div>
+      </main>
 
       {isSidebarOpen && (
         <div

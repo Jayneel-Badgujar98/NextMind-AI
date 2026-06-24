@@ -16,6 +16,10 @@ const chatSchema = new mongoose.Schema(
       type: String,
       default: "#General"
     },
+    isPinned: {
+      type: Boolean,
+      default: false
+    },
     messages: [
       {
         role: {

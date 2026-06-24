@@ -44,8 +44,6 @@ const ChatInput = ({ onSendMessage, isLoading, onStop }) => {
     }
   }, [input]);
 
-
-
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
